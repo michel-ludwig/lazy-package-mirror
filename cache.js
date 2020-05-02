@@ -58,6 +58,7 @@ async function readCacheFromDisk(repo)
     catch(err) {
         if(err.code === 'ENOENT') {
             console.info('Setting up new cache for repo', repo);
+            rawData = m_cacheFileFormatVersionString + '{}';
         }
         else {
             throw err;
