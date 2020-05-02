@@ -1,3 +1,20 @@
+//  cached-file-stream.js
+//
+//  Copyright (C) 2020 Michel Ludwig
+//
+//  This program is free software: you can redistribute it and/or modify
+//  it under the terms of the GNU General Public License as published by
+//  the Free Software Foundation, either version 3 of the License, or
+//  (at your option) any later version.
+//
+//  This program is distributed in the hope that it will be useful,
+//  but WITHOUT ANY WARRANTY; without even the implied warranty of
+//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//  GNU General Public License for more details.
+//
+//  You should have received a copy of the GNU General Public License
+//  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 const stream = require('stream');
 const fs = require('fs');
 
@@ -5,7 +22,6 @@ class CachedFileReadStream extends stream.Readable {
 
     constructor(cacheInfo, incomingRes, options)
     {
-//         super({encoding: 'binary'});
         super();
         this.m_cacheInfo = cacheInfo;
         this.m_incomingRes = incomingRes;
@@ -25,16 +41,12 @@ class CachedFileReadStream extends stream.Readable {
 
     readInReactionToBytesWritten()
     {
-// console.log('bytes were written');
         this.tryToPushData();
     }
 
     tryToPushData()
     {
-// console.log('entering tryToPushData, fd is', this.m_fd, this.m_bytesWritten, this.m_cacheInfo.downloadedLength);
-
         if(this.m_pushInProgress || !this.m_pushStillPossible) {
-// console.log('push in in progress or push is not possible any more');
             return;
         }
         if(!this.m_cacheInfo.dataFile) { // dataFile is not set up yet
@@ -46,10 +58,8 @@ class CachedFileReadStream extends stream.Readable {
                     if(err) {
                         //TODO: add error handling
                         // special case: file doesn't exist (yet), then we can just return; the file will be created sooner or later
-//                         this.emit('error', err);
                         return;
                     }
-// console.log('file is open');
                     this.m_fd = fd;
                     this.tryToPushData();
                 });
@@ -59,7 +69,6 @@ class CachedFileReadStream extends stream.Readable {
         this.m_pushInProgress = true;
 
         if(this.m_bytesWritten < this.m_cacheInfo.downloadedLength) {
-// console.log('\tif 1');
             const readSize = Math.min(this.m_BUFFER_SIZE, this.m_cacheInfo.downloadedLength - this.m_bytesWritten);
 
             fs.read(this.m_fd, this.m_buffer, 0, readSize, this.m_bytesWritten, (err, bytesRead, data) => {
@@ -73,7 +82,6 @@ class CachedFileReadStream extends stream.Readable {
         }
         else {
             if(this.m_cacheInfo.completelyDownloaded) {
-// console.log('\tif 2');
                 this.push(null);
             }
             this.m_pushInProgress = false;
@@ -84,18 +92,15 @@ class CachedFileReadStream extends stream.Readable {
     dataRead(bytesActuallyRead, data)
     {
         this.m_pushInProgress = false;
-// console.log('data has been read', bytesActuallyRead);
         this.m_bytesWritten += bytesActuallyRead;
 
         const pushBuffer = Buffer.allocUnsafe(bytesActuallyRead);
         this.m_buffer.copy(pushBuffer, 0, 0, bytesActuallyRead);
 
         if(!this.push(pushBuffer)) {
-// console.log('pushing is no longer possible');
             this.m_pushStillPossible = false;
             return;
         }
-// console.log('pushed', this.m_bytesWritten, 'to', this.m_fd);
 
         if(this.m_bytesWritten === this.m_cacheInfo.downloadedLength && this.m_cacheInfo.completelyDownloaded) {
             if(this.m_fd) { // can be null when fileOpenPromise failed
