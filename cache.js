@@ -366,7 +366,7 @@ async function downloadAndDistribute(repo, releasever, basearch, path, incomingR
     }
 
     function handleEnd() {
-        if(options.logRequests) {
+        if(m_config.logRequests) {
             console.log('download complete for', repo, releasever, basearch, path);
         }
         cacheInfo.completelyDownloaded = true;
