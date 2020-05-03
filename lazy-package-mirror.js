@@ -74,6 +74,7 @@ const app = express();
         await cache.init(config);
         require('./routes')(app, cache, config);
 
+        console.info('Using cache at', config.cacheDir);
         app.listen(config.listenPort, config.listenAddress, null, () => {
             console.info('lazy-package-mirror is listening on port', config.listenPort);
         });
