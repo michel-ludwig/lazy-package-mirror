@@ -226,7 +226,7 @@ async function fileRequested(repo, releasever, basearch, path, incomingRes)
         }
         await continuouslyTransferFile(repo, releasever, basearch, path, incomingRes);
     }
-    else if(cacheInfo.hasOwnProperty('downloadedLength') && cacheInfo.downloadedLength >= 0) {
+    else if(cacheInfo.downloading) {
         if(m_config.logRequests) {
             console.log('\tdownload in progress; transferring from cache');
         }
@@ -370,6 +370,7 @@ async function downloadAndDistribute(repo, releasever, basearch, path, incomingR
         if(m_config.logRequests) {
             console.log('download complete for', repo, releasever, basearch, path);
         }
+        cacheInfo.downloading = false;
         cacheInfo.completelyDownloaded = true;
         setImmediate(writeCachesToDisk);
     }
@@ -393,6 +394,7 @@ async function downloadAndDistribute(repo, releasever, basearch, path, incomingR
         }
 
         cacheInfo.predictedContentLength = res.headers.get('content-length');
+        cacheInfo.downloading = true;
 
         let workers = 1;    // ensure that 'handleEnd' is only called after 'end' has been fired and
                             // the last piece of data has been written to disk
@@ -410,6 +412,9 @@ async function downloadAndDistribute(repo, releasever, basearch, path, incomingR
                                                     checkIfEndReached(); });
         res.body.on('end', function() { --workers;
                                         checkIfEndReached(); });
+
+        res.body.on('error', function() { cacheInfo.downloading = false; });
+        res.body.on('abort', function() { cacheInfo.downloading = false; });
 
         continuouslyTransferFile(repo, releasever, basearch, path, incomingRes);
     }
