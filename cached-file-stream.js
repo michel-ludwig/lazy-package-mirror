@@ -68,41 +68,34 @@ class CachedFileReadStream extends stream.Readable {
 
         this.m_pushInProgress = true;
 
-        if(this.m_bytesWritten < this.m_cacheInfo.downloadedLength) {
-            const readSize = Math.min(this.m_BUFFER_SIZE, this.m_cacheInfo.downloadedLength - this.m_bytesWritten);
-
-            fs.read(this.m_fd, this.m_buffer, 0, readSize, this.m_bytesWritten, (err, bytesRead, data) => {
-                        if(err) {
-                            this.m_pushInProgress = false;
-                            this.emit('error', err);
-                            return;
-                        }
-                        this.dataRead(bytesRead, data);
-                    });
-        }
-        else {
-            if(this.m_cacheInfo.completelyDownloaded) {
-                this.push(null);
-            }
-            this.m_pushInProgress = false;
-        }
-
+        fs.read(this.m_fd, this.m_buffer, 0, this.m_BUFFER_SIZE, this.m_bytesWritten, (err, bytesRead, data) => {
+                    if(err) {
+                        this.m_pushInProgress = false;
+                        this.emit('error', err);
+                        return;
+                    }
+                    this.dataRead(bytesRead, data);
+                });
     }
 
-    dataRead(bytesActuallyRead, data)
+    dataRead(nrBytesActuallyRead, data)
     {
+        const reachedEOF = nrBytesActuallyRead < this.m_BUFFER_SIZE;
+
         this.m_pushInProgress = false;
-        this.m_bytesWritten += bytesActuallyRead;
+        this.m_bytesWritten += nrBytesActuallyRead;
 
-        const pushBuffer = Buffer.allocUnsafe(bytesActuallyRead);
-        this.m_buffer.copy(pushBuffer, 0, 0, bytesActuallyRead);
+        if(nrBytesActuallyRead > 0) {
+            const pushBuffer = Buffer.allocUnsafe(nrBytesActuallyRead);
+            this.m_buffer.copy(pushBuffer, 0, 0, nrBytesActuallyRead);
 
-        if(!this.push(pushBuffer)) {
-            this.m_pushStillPossible = false;
-            return;
+            if(!this.push(pushBuffer)) {
+                this.m_pushStillPossible = false;
+                return;
+            }
         }
 
-        if(this.m_bytesWritten === this.m_cacheInfo.downloadedLength && this.m_cacheInfo.completelyDownloaded) {
+        if(reachedEOF && this.m_cacheInfo.completelyDownloaded) {
             if(this.m_fd) { // can be null when fileOpenPromise failed
                 fs.close(this.m_fd, (err) => {
                                                 if(err) { //TODO: improve error handling

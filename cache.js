@@ -17,19 +17,9 @@
 
 const fs = require('fs');
 const {promisify} = require('util');
-const readdirPromise = promisify(fs.readdir);
-const statPromise = promisify(fs.stat);
-const existsPromise = promisify(fs.exists);
-const appendFilePromise = promisify(fs.appendFile);
-const fileOpenPromise = promisify(fs.open);
 const fileReadFilePromise = promisify(fs.readFile);
 const fileWriteFilePromise = promisify(fs.writeFile);
-const fileClosePromise = promisify(fs.close);
-const fileReadPromise = promisify(fs.read);
-const stream = require('stream');
 const fetch = require('node-fetch');
-
-const http = require('http');
 
 const { CachedFileReadStream } = require('./cached-file-stream');
 const utils = require('./utils');
@@ -353,17 +343,9 @@ async function downloadAndDistribute(repo, releasever, basearch, path, incomingR
         return;
     }
 
-    async function handleDataReceived(chunk) {
-
-        try {
-            await appendFilePromise(diskPath, chunk, {});
-            cacheInfo.downloadedLength += chunk.length;
-
-            notifyCacheFileReadersOfData(cacheInfo);
-        }
-        catch(error) {
-            console.error('WARNING: an error occured while writing:', error);
-        }
+    function handleDataReceived(chunk) {
+        cacheInfo.downloadedLength += chunk.length;
+        notifyCacheFileReadersOfData(cacheInfo);
     }
 
     function handleEnd() {
@@ -377,6 +359,7 @@ async function downloadAndDistribute(repo, releasever, basearch, path, incomingR
 
     function handleError(error) {
         console.error('An error occurred:', error);
+        cacheInfo.downloading = false;
     }
 
     cacheInfo.completelyDownloaded = false;
@@ -396,25 +379,17 @@ async function downloadAndDistribute(repo, releasever, basearch, path, incomingR
         cacheInfo.predictedContentLength = res.headers.get('content-length');
         cacheInfo.downloading = true;
 
-        let workers = 1;    // ensure that 'handleEnd' is only called after 'end' has been fired and
-                            // the last piece of data has been written to disk
+        const fileWriteStream = fs.createWriteStream(diskPath);
 
-        function checkIfEndReached() {
-            if(workers == 0) {
-                handleEnd();
-            }
-        }
-        res.body.on('data', async function(chunk) { res.body.pause(); // as 'handleDataReceived' is async, we don't want
-                                                    ++workers;   // another 'data' event fired inbetween
-                                                    await handleDataReceived(chunk);
-                                                    --workers;
-                                                    res.body.resume();
-                                                    checkIfEndReached(); });
-        res.body.on('end', function() { --workers;
-                                        checkIfEndReached(); });
+        fileWriteStream.on('finish', handleEnd);
 
-        res.body.on('error', function() { cacheInfo.downloading = false; });
-        res.body.on('abort', function() { cacheInfo.downloading = false; });
+        res.body.on('data', handleDataReceived);
+
+        res.body.on('error', handleError);
+
+        res.body.on('abort', handleError);
+
+        res.body.pipe(fileWriteStream);
 
         continuouslyTransferFile(repo, releasever, basearch, path, incomingRes);
     }
