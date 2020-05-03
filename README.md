@@ -19,15 +19,16 @@ We assume that the lazy package mirror is installed on machined named 'fileserve
    ```
    # dnf install nodejs npm
    ```
-2. Create a system user 'lpm' with home directory '/opt/lazy-package-mirror':
+2. Create a system user 'lpm' with home directory '/opt/lazy-package-mirror/':
    ```
    # mkdir /opt/lazy-package-mirror
-   # useradd --home-dir=/opt/lazy-package-mirror --system --user-group lpm
-   # chown lpm:lpm /opt/lazy-package-mirror
+   # useradd --home-dir=/opt/lazy-package-mirror/ --system --user-group lpm
+   # chown lpm:lpm /opt/lazy-package-mirror/
    ```
 3. Create a cache directory, e.g. /var/cache/lazy-package-mirror/
    ```
    # mkdir /var/cache/lazy-package-mirror/
+   # chown lpm:lpm /var/cache/lazy-package-mirror/
    ```
 4. Clone this git repository
    ```
