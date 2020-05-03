@@ -19,25 +19,25 @@ We assume that the lazy package mirror is installed on machined named 'fileserve
    ```
    # dnf install nodejs npm
    ```
-2. Create a system user 'lazy-package-manager':
+2. Create a system user 'lpm' with home directory '/opt/lazy-package-mirror':
    ```
-   # useradd --no-create-home --system --user-group lazy-package-manager
+   # mkdir /opt/lazy-package-mirror
+   # useradd --home-dir=/opt/lazy-package-mirror --system --user-group lpm
+   # chown lpm:lpm /opt/lazy-package-mirror
    ```
 3. Create a cache directory, e.g. /var/cache/lazy-package-mirror/
    ```
    # mkdir /var/cache/lazy-package-mirror/
    ```
-4. Clone this git repository under '/opt'
+4. Clone this git repository
    ```
    # cd /opt
-   # git clone https://github.com/michel-ludwig/lazy-package-mirror.git
-   # chown lazy-package-manager:lazy-package-manager -R lazy-package-mirror
+   # sudo -H -u lpm git clone https://github.com/michel-ludwig/lazy-package-mirror.git
    ```
 5. In '/opt/lazy-package-mirror/' run 'npm install'
    ```
    # cd /opt/lazy-package-mirror/
-   # su lazy-package-mirror
-   $ npm install
+   # sudo -H -u lpm npm install
    ```
 5. Create a file named 'lazy-package-mirror.conf' under '/etc/lazy-package-mirror/' following the example below:
 
@@ -55,13 +55,12 @@ We assume that the lazy package mirror is installed on machined named 'fileserve
    ```
 6. Set the owner and the permissions:
    ```
-   # chown lazy-package-manager:lazy-package-manager /etc/lazy-package-mirror/lazy-package-mirror.conf
+   # chown lpm:lpm /etc/lazy-package-mirror/lazy-package-mirror.conf
    # chmod 600 /etc/lazy-package-mirror/lazy-package-mirror.conf
    ```
 
 6. Run the lazy mirror with 'node lazy-package-mirror' in '/opt/lazy-package-mirror/'
    ```
    # cd /opt/lazy-package-mirror
-   # su lazy-package-mirror
-   $ node lazy-package-mirror
+   # sudo -H -u lpm node lazy-package-mirror
    ```
