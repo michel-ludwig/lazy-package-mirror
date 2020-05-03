@@ -1,9 +1,22 @@
-# lazy-package-mirror
+# Lazy mirror for RPM packages
+
+This is a lazy mirror for RPM packages running on Node.js. You can point your Fedora/CentOS boxes to a machine running the lazy package mirror to speed up the downloading of RPM packges. The lazy package mirror will download the packages once from the Internet and cache them for the Linux boxes in your local network. In this way, packages will have to be downloaded only once from the Internet.
+
+Still work in progress, but it is usable already.
+
+## TODO
+
+* Add admin interface
+* ...
 
 ## Installation
 
-1. Ensure that node.js and npm are installed
+We assume that the lazy package mirror is installed on machined named 'fileserver'.
 
+1. Ensure that node.js and npm are installed, e.g. on Fedora:
+   ```
+   dnf install nodejs npm
+   ```
 2. Clone this git repository under '/opt'
 
 3. In '/opt/lazy-package-mirror/' run 'npm install'
