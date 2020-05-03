@@ -8,7 +8,7 @@ The lazy package mirror works together with the [DNF plugin for detecting local 
 
 ## TODO
 
-* Add admin interface
+* Add admin web interface
 * ...
 
 ## Installation
@@ -64,4 +64,10 @@ We assume that the lazy package mirror is installed on machined named 'fileserve
    ```
    # cd /opt/lazy-package-mirror
    # sudo -H -u lpm node lazy-package-mirror
+   ```
+7. Alternatively, to run the lazy package mirror with systemd, even during boot up:
+   ```
+   # cp /opt/lazy-package-mirror/systemd/lazy-package-mirror.service /etc/systemd/system/
+   # systemctl start lazy-package-mirror
+   # systemctl enable lazy-package-mirror
    ```
