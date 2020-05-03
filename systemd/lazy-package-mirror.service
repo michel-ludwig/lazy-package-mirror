@@ -1,0 +1,17 @@
+[Unit]
+Description=Lazy Package Mirror
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/node /opt/lazy-package-mirror/lazy-package-mirror.js
+Restart=always
+RestartSec=10
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=lazy-package-mirror
+User=lpm
+Group=lpm
+#Environment=
+
+[Install]
+WantedBy=multi-user.target
