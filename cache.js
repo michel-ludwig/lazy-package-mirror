@@ -19,6 +19,7 @@ const fs = require('fs');
 const {promisify} = require('util');
 const fileReadFilePromise = promisify(fs.readFile);
 const fileWriteFilePromise = promisify(fs.writeFile);
+const fileUnlinkPromise = promisify(fs.unlink);
 const fetch = require('node-fetch');
 
 const { CachedFileReadStream } = require('./cached-file-stream');
@@ -139,6 +140,7 @@ async function writeCachesToDisk()
 //     dataFile:
 //     completelyDownloaded: true/false
 //     readersArray: Array
+//     deletionScheduled: true/false
 // }
 
 function getCacheMapForRepo(repo)
@@ -174,6 +176,15 @@ function getCacheInfo(repo, releasever, basearch, path)
     return cacheMapForRepo.get(relativePath);
 }
 
+function removeCacheInfo(repo, cacheInfo)
+{
+    const cacheMapForRepo = getCacheMapForRepo(repo);
+
+    const relativePath = getRelativePathFromDiskPath(repo, cacheInfo.dataFile);
+
+    cacheMapForRepo.delete(relativePath);
+}
+
 // function setCacheInfo(repo, path, info)
 // {
 //     const key = {repo: repo, path: path};
@@ -187,10 +198,84 @@ function getDiskPath(repo, releasever, basearch, path)
     return m_cacheDataDir + repo + '/' + releasever + '/' + basearch + '/' + path;
 }
 
-function getDiskPathRaw(repo, diskPath)
+function getDiskPathRaw(repo, relativePath)
 {
-    return m_cacheDataDir + repo + '/' + diskPath;
+    return m_cacheDataDir + repo + '/' + relativePath;
 }
+
+function getRelativePathFromDiskPath(repo, diskPath)
+{
+    const prefix = m_cacheDataDir + repo + '/';
+    if(!diskPath.startsWith(prefix)) {
+        throw('getRelativePath: wrong repo given: ' + repo + ', ' + diskPath);
+    }
+    return diskPath.substring(prefix.length);
+}
+
+// contains objects of the form
+// {cacheInfo: ,
+//  repo: }
+const m_deletionQueue = [];
+
+function findInDeletionQueue(repo, cacheInfo)
+{
+    return m_deletionQueue.find(deletionInfo => deletionInfo.repo === repo && deletionInfo.cacheInfo === cacheInfo);
+}
+
+async function deleteCachedFile(repo, cacheInfo)
+{
+    removeCacheInfo(repo, cacheInfo);
+    try {
+        await fileUnlinkPromise(cacheInfo.dataFile);
+        console.info('Cached file has been deleted:', cacheInfo.dataFile);
+    }
+    catch(err) {
+        console.error('Couldn\'t delete cached file:', );
+    }
+}
+
+let m_deletionsRunning = false;
+
+async function performDeletions()
+{
+    if(m_deletionsRunning) {
+        return;
+    }
+    m_deletionsRunning = true;
+
+    while(m_deletionQueue.length > 0) {
+        const deletionInfo = m_deletionQueue.shift();
+        const cacheInfo = deletionInfo.cacheInfo;
+        const repo = deletionInfo.repo;
+
+        if(isCacheFileReadStreamConnected(cacheInfo)) {
+            // the deletion will be scheduled when no reader is connected
+            continue;
+        }
+        await deleteCachedFile(repo, cacheInfo);
+    }
+    m_deletionsRunning = false;
+    setImmediate(writeCachesToDisk);
+}
+
+
+function scheduleCachedFileDeletion(repo, cacheInfo)
+{
+    if(findInDeletionQueue(repo, cacheInfo)) {
+        // a deletion for this entry has already been scheduled;
+        return;
+    }
+    cacheInfo.deletionScheduled = true;
+    if(!cacheInfo.completelyDownloaded) {
+        // the deletion will be scheduled when the download is compelte
+        return;
+    }
+    m_deletionQueue.push({repo: repo,
+                          cacheInfo: cacheInfo,
+                         });
+    setImmediate(performDeletions);
+}
+
 
 /* Currently, we have a very simple caching strategy:
  * files ending in *.rpm or *.drpm are cached, all others are not
@@ -228,6 +313,11 @@ async function fileRequested(repo, releasever, basearch, path, incomingRes)
         }
         await downloadAndDistribute(repo, releasever, basearch, path, incomingRes);
     }
+}
+
+function isCacheFileReadStreamConnected(cacheInfo)
+{
+    return cacheInfo.readersArray.length > 0;
 }
 
 function containsCacheFileReadStream(stream, cacheInfo)
@@ -270,6 +360,9 @@ async function continuouslyTransferFile(repo, releasever, basearch, path, incomi
     cachedFileReadStream.on('end', function() {
                                         incomingRes.end();
                                         removeCacheFileReadStream(cachedFileReadStream, cacheInfo);
+                                        if(cacheInfo.deletionScheduled) {
+                                            scheduleCachedFileDeletion(repo, cacheInfo);
+                                        }
                                    });
 
     const headers = {'content-type': 'application/octet-stream'};
@@ -355,6 +448,9 @@ async function downloadAndDistribute(repo, releasever, basearch, path, incomingR
         cacheInfo.downloading = false;
         cacheInfo.completelyDownloaded = true;
         setImmediate(writeCachesToDisk);
+        if(cacheInfo.deletionScheduled) {
+            scheduleCachedFileDeletion(repo, cacheInfo);
+        }
     }
 
     function handleError(error) {
