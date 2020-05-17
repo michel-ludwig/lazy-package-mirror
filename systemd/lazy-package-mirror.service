@@ -4,6 +4,7 @@ After=network.target
 
 [Service]
 ExecStart=/usr/bin/node /opt/lazy-package-mirror/lazy-package-mirror.js
+WorkingDirectory=/opt/lazy-package-mirror/
 Restart=always
 RestartSec=10
 StandardOutput=syslog
