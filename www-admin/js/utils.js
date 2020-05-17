@@ -15,6 +15,26 @@
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+function roundTo3Digits(num)
+{
+    return Math.round((num + Number.EPSILON) * 1000) / 1000;
+}
+
+function dataSizeToUserString(sizeInBytes)
+{
+    if(sizeInBytes < 1024) {
+        return sizeInBytes + ' bytes';
+    }
+    else if(sizeInBytes < 1024 * 1024) {
+        return roundTo3Digits(sizeInBytes / 1024) + ' kiB';
+    }
+    else if(sizeInBytes < 1024 * 1024 * 1024) {
+        return roundTo3Digits(sizeInBytes / (1024 * 1024)) + ' MiB';
+    }
+    else {
+        return roundTo3Digits(sizeInBytes / (1024 * 1024 * 1024)) + ' GiB';
+    }
+}
 
 function removeAllChildren(element)
 {

@@ -68,7 +68,7 @@ const page_cache_content =
         addTableCell(rowElement, cacheEntry.releasever);
         addTableCell(rowElement, cacheEntry.basearch);
         addTableCell(rowElement, cacheEntry.relativePath);
-        addTableCell(rowElement, cacheEntry.downloadedLength);
+        addTableCell(rowElement, dataSizeToUserString(cacheEntry.downloadedLength));
         addTableCell(rowElement, cacheEntry.completelyDownloaded);
         addTableCell(rowElement, cacheEntry.deletionScheduled);
         const deletionLink = makeTextLink('Delete', async function() {
