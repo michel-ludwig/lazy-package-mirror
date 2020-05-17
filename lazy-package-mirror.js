@@ -70,7 +70,7 @@ const app = express();
     const config = parseConfig();
 
     try {
-//         app.use('/admin', express.static('www-admin'))
+        app.use('/admin', express.static('www-admin'))
         await cache.init(config);
         require('./routes')(app, cache, config);
 

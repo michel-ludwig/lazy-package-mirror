@@ -51,6 +51,43 @@ app.get(/^\/cache\/([a-zA-Z0-9\-]+)\/([0-9]+)\/([a-zA-Z0-9_]+)\/(.+)/, async (re
 
 });
 
+app.get('/api/v1/cache/overview/', (req, res) => {
+//     const repo = req.params[0];
+//     const releasever = req.params[1];
+//     const basearch = req.params[2];
+//     const path = req.params[3];
+//
+//     try {
+//         res.status(200);
+//
+//         await cache.fileRequested(repo, releasever, basearch, path, res);
+//     }
+//     catch(error) {
+//         console.log('error', error);
+//     }
+    res.send(cache.getCacheOverview());
+});
+
+app.get('/api/v1/cache/delete/:repo/:releasever/:basearch/:path(*)', async (req, res) => {
+    const repo = req.params.repo;
+    const releasever = req.params.releasever;
+    const basearch = req.params.basearch;
+    const path = req.params.path;
+
+    if(!cache.containsCachedFile(repo, releasever, basearch, path)) {
+        res.sendStatus(404);
+        return;
+    }
+
+    try {
+        cache.scheduleCachedFileDeletion(repo, releasever, basearch, path);
+        res.sendStatus(200);
+    }
+    catch(error) {
+        console.log('error', error);
+        res.sendStatus(500);
+    }
+});
 
 }
 

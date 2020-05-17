@@ -141,6 +141,8 @@ async function writeCachesToDisk()
 //     completelyDownloaded: true/false
 //     readersArray: Array
 //     deletionScheduled: true/false
+//     releasever:
+//     basearch:
 // }
 
 function getCacheMapForRepo(repo)
@@ -185,6 +187,18 @@ function removeCacheInfo(repo, cacheInfo)
     cacheMapForRepo.delete(relativePath);
 }
 
+function containsCachedFile(repo, releasever, basearch, path)
+{
+    if(!m_cacheMapForRepo.has(repo)) {
+        return false;
+    }
+    const cacheMapForRepo = m_cacheMapForRepo.get(repo);
+
+    const relativePath = getRelativePath(releasever, basearch, path);
+
+    return cacheMapForRepo.has(relativePath);
+}
+
 // function setCacheInfo(repo, path, info)
 // {
 //     const key = {repo: repo, path: path};
@@ -210,6 +224,22 @@ function getRelativePathFromDiskPath(repo, diskPath)
         throw('getRelativePath: wrong repo given: ' + repo + ', ' + diskPath);
     }
     return diskPath.substring(prefix.length);
+}
+
+// relative path as it was on the remote mirror
+function getRealRelativePathFromDiskPath(repo, releasever, basearch, diskPath)
+{
+    const prefix = m_cacheDataDir + repo + '/' + releasever + '/' + basearch + '/';
+    if(!diskPath.startsWith(prefix)) {
+        throw('getRelativePath: wrong repo given: ' + repo + ', ' + diskPath);
+    }
+    return diskPath.substring(prefix.length);
+}
+
+// relative path as it was on the remote mirror
+function getRealRelativePathFromCacheInfo(repo, cacheInfo)
+{
+    return getRealRelativePathFromDiskPath(repo, cacheInfo.releasever, cacheInfo.basearch, cacheInfo.dataFile);
 }
 
 // contains objects of the form
@@ -241,6 +271,7 @@ async function performDeletions()
     if(m_deletionsRunning) {
         return;
     }
+
     m_deletionsRunning = true;
 
     while(m_deletionQueue.length > 0) {
@@ -259,7 +290,7 @@ async function performDeletions()
 }
 
 
-function scheduleCachedFileDeletion(repo, cacheInfo)
+function scheduleCachedFileDeletionRaw(repo, cacheInfo)
 {
     if(findInDeletionQueue(repo, cacheInfo)) {
         // a deletion for this entry has already been scheduled;
@@ -267,7 +298,7 @@ function scheduleCachedFileDeletion(repo, cacheInfo)
     }
     cacheInfo.deletionScheduled = true;
     if(!cacheInfo.completelyDownloaded) {
-        // the deletion will be scheduled when the download is compelte
+        // the deletion will be scheduled when the download is complete
         return;
     }
     m_deletionQueue.push({repo: repo,
@@ -276,6 +307,10 @@ function scheduleCachedFileDeletion(repo, cacheInfo)
     setImmediate(performDeletions);
 }
 
+function scheduleCachedFileDeletion(repo, releasever, basearch, path)
+{
+    scheduleCachedFileDeletionRaw(repo, getCacheInfo(repo, releasever, basearch, path));
+}
 
 /* Currently, we have a very simple caching strategy:
  * files ending in *.rpm or *.drpm are cached, all others are not
@@ -294,7 +329,7 @@ async function fileRequested(repo, releasever, basearch, path, incomingRes)
     }
 
     const cacheInfo = getCacheInfo(repo, releasever, basearch, path);
-// console.log('found cacheInfo', cacheInfo);
+
     if(cacheInfo.completelyDownloaded) {
         if(m_config.logRequests) {
             console.log('\talready completely downloaded; transferring from cache');
@@ -361,7 +396,7 @@ async function continuouslyTransferFile(repo, releasever, basearch, path, incomi
                                         incomingRes.end();
                                         removeCacheFileReadStream(cachedFileReadStream, cacheInfo);
                                         if(cacheInfo.deletionScheduled) {
-                                            scheduleCachedFileDeletion(repo, cacheInfo);
+                                            scheduleCachedFileDeletionRaw(repo, cacheInfo);
                                         }
                                    });
 
@@ -449,7 +484,7 @@ async function downloadAndDistribute(repo, releasever, basearch, path, incomingR
         cacheInfo.completelyDownloaded = true;
         setImmediate(writeCachesToDisk);
         if(cacheInfo.deletionScheduled) {
-            scheduleCachedFileDeletion(repo, cacheInfo);
+            scheduleCachedFileDeletionRaw(repo, cacheInfo);
         }
     }
 
@@ -494,6 +529,27 @@ async function downloadAndDistribute(repo, releasever, basearch, path, incomingR
     }
 }
 
+function getCacheOverview()
+{
+    const toReturn = {};
+
+    for(const [repo, cacheMap] of m_cacheMapForRepo) {
+        const repoArray = [];
+        for(const [relativePath, cacheInfo] of cacheMap) {
+            const entry = {};
+            entry.downloadedLength = cacheInfo.downloadedLength;
+            entry.completelyDownloaded = cacheInfo.completelyDownloaded;
+            entry.deletionScheduled = cacheInfo.deletionScheduled || false;
+            entry.releasever = cacheInfo.releasever;
+            entry.basearch = cacheInfo.basearch;
+            entry.relativePath = getRealRelativePathFromCacheInfo(repo, cacheInfo);
+            repoArray.push(entry);
+        }
+        toReturn[repo] = repoArray;
+    }
+    return toReturn;
+}
+
 async function init(config)
 {
     m_config = config;
@@ -515,6 +571,9 @@ async function init(config)
 module.exports = {fileRequested: fileRequested,
                   init: init,
                   writeCachesToDisk: writeCachesToDisk,
+                  getCacheOverview: getCacheOverview,
+                  scheduleCachedFileDeletion: scheduleCachedFileDeletion,
+                  containsCachedFile: containsCachedFile,
                  };
 
 // kate: space-indent on; indent-width 4; mixedindent off;

@@ -3,17 +3,62 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="Admin Page for Lazy Package Mirror">
 
   <title>Lazy Package Mirror Administration</title>
-<!--   <meta name="description" content="The HTML5 Herald"> -->
-<!--   <meta name="author" content="SitePoint"> -->
 
-<!--   <link rel="stylesheet" href="css/styles.css?v=1.0"> -->
+  <link rel="stylesheet" href="css/style.css">
+  <script src="js/utils.js"></script>
+  <script src="js/page_overview.js"></script>
+  <script src="js/page_cache.js"></script>
+  <script src="js/main.js"></script>
 
-</head>
+  <script>
+    function makeLinkOpenFunction(link, page)
+    {
+      return function() {
+                loadPage(page);
+                link.blur();
+             };
+    }
+
+    function addNavigationLinkOpener(link, page)
+    {
+      link.addEventListener('click', makeLinkOpenFunction(link, page));
+    }
+
+    function setupNavigation()
+    {
+      const overviewLink = document.getElementById('navigation_overview_link');
+      const cacheLink = document.getElementById('navigation_cache_link');
+
+      addNavigationLinkOpener(overviewLink, page_overview);
+      addNavigationLinkOpener(cacheLink, page_cache_content);
+    }
+
+    const pages = [page_overview];
+    window.onload = async function() {
+                      setupNavigation();
+
+                      await loadPage(page_overview);
+                    };
+  </script>
+
+  </head>
 
 <body>
-<!--   <script src="js/scripts.js"></script> -->
-<h1>Lazy Package Mirror Administration</h1>
+
+<div class="navigation">
+<a id="navigation_overview_link" href="#">Overview</a>
+<a id="navigation_cache_link" href="#">Cache</a>
+</div>
+
+<div id="mainContent" class="mainContent">
+</div>
+
 </body>
 </html>
+
+
+<!--kate: space-indent on; indent-width 2; mixedindent off;-->

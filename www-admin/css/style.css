@@ -1,0 +1,39 @@
+
+body {
+
+}
+
+.navigation {
+  position: fixed;
+  width: 100px;
+  height: 100%;
+  top: 0;
+  left: 0;
+  padding-top: 5px;
+  background-color: #e6e6e6;
+}
+
+.navigation a {
+  padding: 6px 6px 6px 6px;
+  display: block;
+}
+
+.mainContent {
+    margin-left: 120px;
+}
+
+.repositoryTable {
+    border: 1px solid;
+}
+
+.repositoryTable th {
+    text-align: left;
+    padding: 5px;
+}
+
+.repositoryTable td {
+    text-align: left;
+    padding: 5px;
+}
+
+/*kate: space-indent on; indent-width 4; mixedindent off;*/
