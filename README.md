@@ -25,49 +25,62 @@ We assume that the lazy package mirror is installed on machined named 'fileserve
    # useradd --home-dir=/opt/lazy-package-mirror/ --system --user-group lpm
    # chown lpm:lpm /opt/lazy-package-mirror/
    ```
-3. Create a cache directory, e.g. /var/cache/lazy-package-mirror/
+3. Create a cache directory, e.g. /var/cache/lazy-package-mirror/:
    ```
    # mkdir /var/cache/lazy-package-mirror/
    # chown lpm:lpm /var/cache/lazy-package-mirror/
    ```
-4. Clone this git repository
+4. Create directories for the configuration files:
+   ```
+   # mkdir /etc/lazy-package-mirror/
+   # mkdir /etc/lazy-package-mirror/distros.d/
+   # chown lpm:lpm -R /etc/lazy-package-mirror/
+   ```
+5. Clone this git repository
    ```
    # cd /opt
    # sudo -H -u lpm git clone https://github.com/michel-ludwig/lazy-package-mirror.git
    ```
-5. In '/opt/lazy-package-mirror/' run 'npm install'
+6. In '/opt/lazy-package-mirror/' run 'npm install'
    ```
    # cd /opt/lazy-package-mirror/
    # sudo -H -u lpm npm install
    ```
-5. Create a file named 'lazy-package-mirror.conf' under '/etc/lazy-package-mirror/' following the example below:
+7. Create a file named 'lazy-package-mirror.conf' under '/etc/lazy-package-mirror/' following the example below:
 
    ```
    listenPort = 7000
    cacheDir = /var/cache/lazy-package-mirror/
    hostName = fileserver
    logRequests = false
+   ```
 
+8. For every distribution for which you want to cache packages, create an appropriate configuration file named 
+   '<distro>.repos' under '/etc/lazy-package-mirror/distros.d/', for example for Fedora under
+   '/etc/lazy-package-mirror/distros.d/fedora.repos':
+   
+   ```
    [repo:fedora]
    downloadURL = http://ftp-stud.hs-esslingen.de/Mirrors/fedora.redhat.com/linux/releases/$releasever/Everything/$basearch/os/
 
    [repo:updates]
    downloadURL = http://ftp-stud.hs-esslingen.de/Mirrors/fedora.redhat.com/linux/updates/$releasever/Everything/$basearch/
    ```
-6. Set the owner and the permissions:
+
+9. Set the owner and the permissions:
    ```
    # chown lpm:lpm /etc/lazy-package-mirror/lazy-package-mirror.conf
    # chmod 600 /etc/lazy-package-mirror/lazy-package-mirror.conf
    ```
 
-6. Run the lazy mirror with 'node lazy-package-mirror' in '/opt/lazy-package-mirror/'
-   ```
-   # cd /opt/lazy-package-mirror
-   # sudo -H -u lpm node lazy-package-mirror
-   ```
-7. Alternatively, to run the lazy package mirror with systemd, even during boot up:
-   ```
-   # cp /opt/lazy-package-mirror/systemd/lazy-package-mirror.service /etc/systemd/system/
-   # systemctl start lazy-package-mirror
-   # systemctl enable lazy-package-mirror
+10. Run the lazy mirror with 'node lazy-package-mirror' in '/opt/lazy-package-mirror/'
+    ```
+    # cd /opt/lazy-package-mirror
+    # sudo -H -u lpm node lazy-package-mirror
+    ```
+11. Alternatively, to run the lazy package mirror with systemd, even during boot up:
+    ```
+    # cp /opt/lazy-package-mirror/systemd/lazy-package-mirror.service /etc/systemd/system/
+    # systemctl start lazy-package-mirror
+    # systemctl enable lazy-package-mirror
    ```
