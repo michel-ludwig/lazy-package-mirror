@@ -67,10 +67,11 @@ We assume that the lazy package mirror is installed on machined named 'fileserve
    downloadURL = http://ftp-stud.hs-esslingen.de/Mirrors/fedora.redhat.com/linux/updates/$releasever/Everything/$basearch/
    ```
 
-9. Set the owner and the permissions:
+9. Set the owner and the permissions of the configuration files:
    ```
-   # chown lpm:lpm /etc/lazy-package-mirror/lazy-package-mirror.conf
+   # chown lpm:lpm -R /etc/lazy-package-mirror/
    # chmod 600 /etc/lazy-package-mirror/lazy-package-mirror.conf
+   # chmod 600 /etc/lazy-package-mirror/distros.d/fedora.repos
    ```
 
 10. Run the lazy mirror with 'node lazy-package-mirror' in '/opt/lazy-package-mirror/'
