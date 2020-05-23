@@ -18,13 +18,38 @@
 const fs      = require('fs');
 const ini     = require('ini')
 const express = require('express');
+const path    = require('path');
 
 const cache   = require('./cache');
 const utils   = require('./utils');
 
+function readRepoConfigFileForDistro(configFile)
+{
+    const configFileContent = fs.readFileSync(configFile, 'utf-8');
+    parsedConfig = ini.parse(configFileContent);
+
+    const toReturn = {};
+    for(let configKey in parsedConfig) {
+        if(!configKey.startsWith('repo:')) {
+            continue;
+        }
+        const repoName = configKey.substring(5); // remove 'repo:'
+        const downloadURL = parsedConfig[configKey].downloadURL;
+        if(!downloadURL) {
+            console.error('WARNING: repository', repoName, 'doesn\'t have a download URL');
+            continue;
+        }
+        toReturn[repoName] = {downloadURL: downloadURL};
+    }
+    return toReturn;
+}
+
 function parseConfig()
 {
-    const configFile = '/etc/lazy-package-mirror/lazy-package-mirror.conf';
+    const configDir = '/etc/lazy-package-mirror/';
+    const configFile = configDir + 'lazy-package-mirror.conf';
+    const distroRepositoryConfigurationDir = configDir + 'distros.d/';
+
     const config = {};
     let parsedConfig = {};
     try {
@@ -32,7 +57,7 @@ function parseConfig()
         parsedConfig = ini.parse(configFileContent);
     }
     catch(err) {
-        console.error('WARNING: Could not read the configuration file:', configFile);
+        console.error('WARNING: Could not read the configuration file', configFile, ':', err);
     }
 
     const defaultPort = 7000;
@@ -48,17 +73,18 @@ function parseConfig()
     config.logRequests = parsedConfig.logRequests || false;
 
     config.repos = {};
-    for(let configKey in parsedConfig) {
-        if(!configKey.startsWith('repo:')) {
-            continue;
+    try {
+        const directory = fs.opendirSync(distroRepositoryConfigurationDir)
+        let dirEntry = null;
+        while(dirEntry = directory.readSync()) {
+            const distroName = path.parse(dirEntry.name).name;
+            const repos = readRepoConfigFileForDistro(distroRepositoryConfigurationDir + dirEntry.name);
+            config.repos[distroName] = repos;
         }
-        const repoName = configKey.substring(5); // remove 'repo:'
-        const downloadURL = parsedConfig[configKey].downloadURL;
-        if(!downloadURL) {
-            console.error('WARNING: repository', repoName, 'doesn\'t have a download URL');
-            continue;
-        }
-        config.repos[repoName] = {downloadURL: downloadURL};
+        directory.closeSync()
+    }
+    catch(err) {
+        console.error('WARNING: Could not read the repository configuration files:', err);
     }
     return config;
 }
@@ -67,9 +93,9 @@ const app = express();
 
 (async function() {
 
-    const config = parseConfig();
-
     try {
+        const config = parseConfig();
+
         app.use('/admin', express.static('www-admin'))
         await cache.init(config);
         require('./routes')(app, cache, config);

@@ -26,11 +26,12 @@ const { CachedFileReadStream } = require('./cached-file-stream');
 const utils = require('./utils');
 
 let m_config = null;
-const m_cacheMapForRepo = new Map();
+// m_cacheMapForDistro -> (repo -> cacheInfo) -> cacheInfo
+const m_cacheMapForDistro = new Map();
 
-function getFileForCache(repo)
+function getFileForCache(distro, repo)
 {
-    return m_config.cacheDir + 'cache-info/' + repo + '.cache';
+    return m_config.cacheDir + 'cache-info/' + distro + '/' + repo + '.cache';
 }
 
 // contents of cache file on disk
@@ -38,18 +39,18 @@ function getFileForCache(repo)
 // }
 
 const m_cacheFileFormatVersionString = 'cache file format v1\n';
-async function readCacheFromDisk(repo)
+async function readCacheFromDisk(distro, repo)
 {
-    const cacheMapForRepo = getCacheMapForRepo(repo);
+    const cacheMapForDistroRepo = getCacheMapForDistroRepo(distro, repo);
 
-    const cacheFile = getFileForCache(repo);
+    const cacheFile = getFileForCache(distro, repo);
     let rawData = null;
     try {
         rawData = await fileReadFilePromise(cacheFile, {encoding: 'utf8'});
     }
     catch(err) {
         if(err.code === 'ENOENT') {
-            console.info('Setting up new cache for repo', repo);
+            console.info('Setting up new cache for distro', '\'' + distro + '\'', 'and repo', '\'' + repo + '\'');
             rawData = m_cacheFileFormatVersionString + '{}';
         }
         else {
@@ -70,8 +71,8 @@ async function readCacheFromDisk(repo)
         cacheInfo.basearch = storedCacheObject[relativePath].basearch;
         cacheInfo.completelyDownloaded = storedCacheObject[relativePath].completelyDownloaded;
         cacheInfo.downloadedLength = storedCacheObject[relativePath].downloadedLength;
-        cacheInfo.dataFile = getDiskPathRaw(repo, relativePath);
-        cacheMapForRepo.set(relativePath, cacheInfo);
+        cacheInfo.dataFile = getDiskPathRaw(distro, repo, relativePath);
+        cacheMapForDistroRepo.set(relativePath, cacheInfo);
     }
 }
 
@@ -81,12 +82,12 @@ let m_cacheWritingImmediate = false;
 
 async function writeCachesToDisk()
 {
-    async function writeCacheToDisk(repo)
+    async function writeCacheToDisk(distro, repo)
     {
-        const cacheFile = getFileForCache(repo);
+        const cacheFile = getFileForCache(distro, repo);
         await utils.ensureParentDirectoriesExist(cacheFile);
 
-        const cacheMap = getCacheMapForRepo(repo);
+        const cacheMap = getCacheMapForDistroRepo(distro, repo);
 
         const toSave = {};
         for(const [relativePath, cacheInfo] of cacheMap) {
@@ -121,15 +122,21 @@ async function writeCachesToDisk()
         clearImmediate(m_cacheWritingImmediate);
         m_cacheWritingImmediate = null;
     }
-    for(let repoName in m_config.repos) {
-        if(!m_config.repos.hasOwnProperty(repoName)) {
+
+    for(let distroName in m_config.repos) {
+        if(!m_config.repos.hasOwnProperty(distroName)) {
             continue;
         }
-        try {
-            await writeCacheToDisk(repoName);
-        }
-        catch(err) {
-            console.error('Cache for repo', repoName, 'could not be saved:', err);
+        for(let repoName in m_config.repos[distroName]) {
+            if(!m_config.repos[distroName].hasOwnProperty(repoName)) {
+                continue;
+            }
+            try {
+                await writeCacheToDisk(distroName, repoName);
+            }
+            catch(err) {
+                console.error('Cache for repo', repoName, 'could not be saved:', err);
+            }
         }
     }
     m_cacheWritingInProgress = false;
@@ -145,12 +152,21 @@ async function writeCachesToDisk()
 //     basearch:
 // }
 
-function getCacheMapForRepo(repo)
+function getCacheMapForDistroRepo(distro, repo)
 {
-    if(!m_cacheMapForRepo.has(repo)) {
-        m_cacheMapForRepo.set(repo, new Map());
+    let cacheMapForRepo = null;
+    if(!m_cacheMapForDistro.has(distro)) {
+        cacheMapForRepo = new Map();
+        m_cacheMapForDistro.set(distro, cacheMapForRepo);
     }
-    return m_cacheMapForRepo.get(repo);
+    else {
+        cacheMapForRepo = m_cacheMapForDistro.get(distro)
+    }
+
+    if(!cacheMapForRepo.has(repo)) {
+        cacheMapForRepo.set(repo, new Map());
+    }
+    return cacheMapForRepo.get(repo);
 }
 
 function getRelativePath(releasever, basearch, path)
@@ -166,33 +182,38 @@ function createEmptyCacheMapEntry()
            };
 }
 
-function getCacheInfo(repo, releasever, basearch, path)
+function getCacheInfo(distro, repo, releasever, basearch, path)
 {
-    const cacheMapForRepo = getCacheMapForRepo(repo);
+    const cacheMapForDistroRepo = getCacheMapForDistroRepo(distro, repo);
 
     const relativePath = getRelativePath(releasever, basearch, path);
 
-    if(!cacheMapForRepo.has(relativePath)) {
-        cacheMapForRepo.set(relativePath, createEmptyCacheMapEntry());
+    if(!cacheMapForDistroRepo.has(relativePath)) {
+        cacheMapForDistroRepo.set(relativePath, createEmptyCacheMapEntry());
     }
-    return cacheMapForRepo.get(relativePath);
+    return cacheMapForDistroRepo.get(relativePath);
 }
 
-function removeCacheInfo(repo, cacheInfo)
+function removeCacheInfo(distro, repo, cacheInfo)
 {
-    const cacheMapForRepo = getCacheMapForRepo(repo);
+    const cacheMapForDistroRepo = getCacheMapForDistroRepo(distro, repo);
 
-    const relativePath = getRelativePathFromDiskPath(repo, cacheInfo.dataFile);
+    const relativePath = getRelativePathFromDiskPath(distro, repo, cacheInfo.dataFile);
 
-    cacheMapForRepo.delete(relativePath);
+    cacheMapForDistroRepo.delete(relativePath);
 }
 
-function containsCachedFile(repo, releasever, basearch, path)
+function containsCachedFile(distro, repo, releasever, basearch, path)
 {
-    if(!m_cacheMapForRepo.has(repo)) {
+    if(!m_cacheMapForDistro.has(distro)) {
         return false;
     }
-    const cacheMapForRepo = m_cacheMapForRepo.get(repo);
+    let cacheMapForDistro = m_cacheMapForDistro.get(distro);
+
+    if(!cacheMapForDistro.has(repo)) {
+        return false;
+    }
+    const cacheMapForRepo = cacheMapForDistro.get(repo);
 
     const relativePath = getRelativePath(releasever, basearch, path);
 
@@ -207,39 +228,39 @@ function containsCachedFile(repo, releasever, basearch, path)
 
 let m_cacheDataDir = null;
 
-function getDiskPath(repo, releasever, basearch, path)
+function getDiskPath(distro, repo, releasever, basearch, path)
 {
-    return m_cacheDataDir + repo + '/' + releasever + '/' + basearch + '/' + path;
+    return m_cacheDataDir + distro + '/' + repo + '/' + releasever + '/' + basearch + '/' + path;
 }
 
-function getDiskPathRaw(repo, relativePath)
+function getDiskPathRaw(distro, repo, relativePath)
 {
-    return m_cacheDataDir + repo + '/' + relativePath;
+    return m_cacheDataDir + distro + '/' + repo + '/' + relativePath;
 }
 
-function getRelativePathFromDiskPath(repo, diskPath)
+function getRelativePathFromDiskPath(distro, repo, diskPath)
 {
-    const prefix = m_cacheDataDir + repo + '/';
+    const prefix = m_cacheDataDir + distro + '/' + repo + '/';
     if(!diskPath.startsWith(prefix)) {
-        throw('getRelativePath: wrong repo given: ' + repo + ', ' + diskPath);
+        throw('getRelativePath: wrong distro or repo given: ' + distro + ', ' + repo + ', ' + diskPath);
     }
     return diskPath.substring(prefix.length);
 }
 
 // relative path as it was on the remote mirror
-function getRealRelativePathFromDiskPath(repo, releasever, basearch, diskPath)
+function getRealRelativePathFromDiskPath(distro, repo, releasever, basearch, diskPath)
 {
-    const prefix = m_cacheDataDir + repo + '/' + releasever + '/' + basearch + '/';
+    const prefix = m_cacheDataDir + distro + '/' + repo + '/' + releasever + '/' + basearch + '/';
     if(!diskPath.startsWith(prefix)) {
-        throw('getRelativePath: wrong repo given: ' + repo + ', ' + diskPath);
+        throw('getRelativePath: wrong distro or repo given: ' + distro + ', ' + repo + ', ' + diskPath);
     }
     return diskPath.substring(prefix.length);
 }
 
 // relative path as it was on the remote mirror
-function getRealRelativePathFromCacheInfo(repo, cacheInfo)
+function getRealRelativePathFromCacheInfo(distro, repo, cacheInfo)
 {
-    return getRealRelativePathFromDiskPath(repo, cacheInfo.releasever, cacheInfo.basearch, cacheInfo.dataFile);
+    return getRealRelativePathFromDiskPath(distro, repo, cacheInfo.releasever, cacheInfo.basearch, cacheInfo.dataFile);
 }
 
 // contains objects of the form
@@ -247,14 +268,14 @@ function getRealRelativePathFromCacheInfo(repo, cacheInfo)
 //  repo: }
 const m_deletionQueue = [];
 
-function findInDeletionQueue(repo, cacheInfo)
+function findInDeletionQueue(distro, repo, cacheInfo)
 {
-    return m_deletionQueue.find(deletionInfo => deletionInfo.repo === repo && deletionInfo.cacheInfo === cacheInfo);
+    return m_deletionQueue.find(deletionInfo => deletionInfo.distro === distro && deletionInfo.repo === repo && deletionInfo.cacheInfo === cacheInfo);
 }
 
-async function deleteCachedFile(repo, cacheInfo)
+async function deleteCachedFile(distro, repo, cacheInfo)
 {
-    removeCacheInfo(repo, cacheInfo);
+    removeCacheInfo(distro, repo, cacheInfo);
     try {
         await fileUnlinkPromise(cacheInfo.dataFile);
         console.info('Cached file has been deleted:', cacheInfo.dataFile);
@@ -277,22 +298,23 @@ async function performDeletions()
     while(m_deletionQueue.length > 0) {
         const deletionInfo = m_deletionQueue.shift();
         const cacheInfo = deletionInfo.cacheInfo;
+        const distro = deletionInfo.distro;
         const repo = deletionInfo.repo;
 
         if(isCacheFileReadStreamConnected(cacheInfo)) {
             // the deletion will be scheduled when no reader is connected
             continue;
         }
-        await deleteCachedFile(repo, cacheInfo);
+        await deleteCachedFile(distro, repo, cacheInfo);
     }
     m_deletionsRunning = false;
     setImmediate(writeCachesToDisk);
 }
 
 
-function scheduleCachedFileDeletionRaw(repo, cacheInfo)
+function scheduleCachedFileDeletionRaw(distro, repo, cacheInfo)
 {
-    if(findInDeletionQueue(repo, cacheInfo)) {
+    if(findInDeletionQueue(distro, repo, cacheInfo)) {
         // a deletion for this entry has already been scheduled;
         return;
     }
@@ -301,52 +323,53 @@ function scheduleCachedFileDeletionRaw(repo, cacheInfo)
         // the deletion will be scheduled when the download is complete
         return;
     }
-    m_deletionQueue.push({repo: repo,
+    m_deletionQueue.push({distro: distro,
+                          repo: repo,
                           cacheInfo: cacheInfo,
                          });
     setImmediate(performDeletions);
 }
 
-function scheduleCachedFileDeletion(repo, releasever, basearch, path)
+function scheduleCachedFileDeletion(distro, repo, releasever, basearch, path)
 {
-    scheduleCachedFileDeletionRaw(repo, getCacheInfo(repo, releasever, basearch, path));
+    scheduleCachedFileDeletionRaw(distro, repo, getCacheInfo(distro, repo, releasever, basearch, path));
 }
 
 /* Currently, we have a very simple caching strategy:
  * files ending in *.rpm or *.drpm are cached, all others are not
  */
-async function fileRequested(repo, releasever, basearch, path, incomingRes)
+async function fileRequested(distro, repo, releasever, basearch, path, incomingRes)
 {
     if(m_config.logRequests) {
-        console.log('file requested:', repo, releasever, basearch, path);
+        console.log('file requested:', distro, repo, releasever, basearch, path);
     }
     if(!path.endsWith(".rpm") && !path.endsWith(".drpm")) { // we only cache rpm files
         if(m_config.logRequests) {
             console.log('\tnot using cache');
         }
-        await downloadAndTransfer(repo, releasever, basearch, path, incomingRes);
+        await downloadAndTransfer(distro, repo, releasever, basearch, path, incomingRes);
         return;
     }
 
-    const cacheInfo = getCacheInfo(repo, releasever, basearch, path);
+    const cacheInfo = getCacheInfo(distro, repo, releasever, basearch, path);
 
     if(cacheInfo.completelyDownloaded) {
         if(m_config.logRequests) {
             console.log('\talready completely downloaded; transferring from cache');
         }
-        await continuouslyTransferFile(repo, releasever, basearch, path, incomingRes);
+        await continuouslyTransferFile(distro, repo, releasever, basearch, path, incomingRes);
     }
     else if(cacheInfo.downloading) {
         if(m_config.logRequests) {
             console.log('\tdownload in progress; transferring from cache');
         }
-        await continuouslyTransferFile(repo, releasever, basearch, path, incomingRes);
+        await continuouslyTransferFile(distro, repo, releasever, basearch, path, incomingRes);
     }
     else {
         if(m_config.logRequests) {
             console.log('\tdownloading...');
         }
-        await downloadAndDistribute(repo, releasever, basearch, path, incomingRes);
+        await downloadAndDistribute(distro, repo, releasever, basearch, path, incomingRes);
     }
 }
 
@@ -385,9 +408,9 @@ function notifyCacheFileReadersOfData(cacheInfo)
     }
 }
 
-async function continuouslyTransferFile(repo, releasever, basearch, path, incomingRes)
+async function continuouslyTransferFile(distro, repo, releasever, basearch, path, incomingRes)
 {
-    const cacheInfo = getCacheInfo(repo, releasever, basearch, path);
+    const cacheInfo = getCacheInfo(distro, repo, releasever, basearch, path);
 
     const cachedFileReadStream = new CachedFileReadStream(cacheInfo, incomingRes);
     addCacheFileReadStream(cachedFileReadStream, cacheInfo);
@@ -396,7 +419,7 @@ async function continuouslyTransferFile(repo, releasever, basearch, path, incomi
                                         incomingRes.end();
                                         removeCacheFileReadStream(cachedFileReadStream, cacheInfo);
                                         if(cacheInfo.deletionScheduled) {
-                                            scheduleCachedFileDeletionRaw(repo, cacheInfo);
+                                            scheduleCachedFileDeletionRaw(distro, repo, cacheInfo);
                                         }
                                    });
 
@@ -409,15 +432,16 @@ async function continuouslyTransferFile(repo, releasever, basearch, path, incomi
     cachedFileReadStream.pipe(incomingRes);
 }
 
-function constructDownloadURL(repo, releasever, basearch, path)
+function constructDownloadURL(distro, repo, releasever, basearch, path)
 {
     if(!m_config.hasOwnProperty('repos')
-        || !m_config.repos.hasOwnProperty(repo)
-        || !m_config.repos[repo].hasOwnProperty('downloadURL')) {
-        throw 'Repo ' + repo + ' not configured correctly!';
+        || !m_config.repos.hasOwnProperty(distro)
+        || !m_config.repos[distro].hasOwnProperty(repo)
+        || !m_config.repos[distro][repo].hasOwnProperty('downloadURL')) {
+        throw 'Repo ' + repo + ' for distro ' + distro + ' not configured correctly!';
     }
 
-    const rawRepoURL = m_config.repos[repo].downloadURL;
+    const rawRepoURL = m_config.repos[distro][repo].downloadURL;
 
     let repoURL = rawRepoURL.replace(/\$releasever/g, releasever);
     repoURL = repoURL.replace(/\$basearch/g, basearch);
@@ -425,9 +449,9 @@ function constructDownloadURL(repo, releasever, basearch, path)
     return repoURL;
 }
 
-async function downloadAndTransfer(repo, releasever, basearch, path, incomingRes) {
+async function downloadAndTransfer(distro, repo, releasever, basearch, path, incomingRes) {
 
-    const url = constructDownloadURL(repo, releasever, basearch, path);
+    const url = constructDownloadURL(distro, repo, releasever, basearch, path);
 
     try {
         const res = await fetch(url);
@@ -446,17 +470,17 @@ async function downloadAndTransfer(repo, releasever, basearch, path, incomingRes
         res.body.pipe(incomingRes);
     }
     catch(error) {
-        console.error('WARNING: an error occurred while downloading:', repo, releasever, basearch, path);
+        console.error('WARNING: an error occurred while downloading:', distro, repo, releasever, basearch, path);
     }
 }
 
-async function downloadAndDistribute(repo, releasever, basearch, path, incomingRes)
+async function downloadAndDistribute(distro, repo, releasever, basearch, path, incomingRes)
 {
-    const cacheInfo = getCacheInfo(repo, releasever, basearch, path);
+    const cacheInfo = getCacheInfo(distro, repo, releasever, basearch, path);
 
 // introduce cacheInfo.downloadIsBeingSetup state...
     cacheInfo.downloadedLength = 0;
-    const diskPath = getDiskPath(repo, releasever, basearch, path);
+    const diskPath = getDiskPath(distro, repo, releasever, basearch, path);
     cacheInfo.dataFile = diskPath;
     cacheInfo.releasever = releasever;
     cacheInfo.basearch = basearch;
@@ -478,13 +502,13 @@ async function downloadAndDistribute(repo, releasever, basearch, path, incomingR
 
     function handleEnd() {
         if(m_config.logRequests) {
-            console.log('download complete for', repo, releasever, basearch, path);
+            console.log('download complete for', distro, repo, releasever, basearch, path);
         }
         cacheInfo.downloading = false;
         cacheInfo.completelyDownloaded = true;
         setImmediate(writeCachesToDisk);
         if(cacheInfo.deletionScheduled) {
-            scheduleCachedFileDeletionRaw(repo, cacheInfo);
+            scheduleCachedFileDeletionRaw(distro, repo, cacheInfo);
         }
     }
 
@@ -495,7 +519,7 @@ async function downloadAndDistribute(repo, releasever, basearch, path, incomingR
 
     cacheInfo.completelyDownloaded = false;
 
-    const url = constructDownloadURL(repo, releasever, basearch, path);
+    const url = constructDownloadURL(distro, repo, releasever, basearch, path);
 
     try {
         const res = await fetch(url);
@@ -522,7 +546,7 @@ async function downloadAndDistribute(repo, releasever, basearch, path, incomingR
 
         res.body.pipe(fileWriteStream);
 
-        continuouslyTransferFile(repo, releasever, basearch, path, incomingRes);
+        continuouslyTransferFile(distro, repo, releasever, basearch, path, incomingRes);
     }
     catch(error) {
         console.error('WARNING: an error occured while downloading:', error);
@@ -532,20 +556,23 @@ async function downloadAndDistribute(repo, releasever, basearch, path, incomingR
 function getCacheOverview()
 {
     const toReturn = {};
-
-    for(const [repo, cacheMap] of m_cacheMapForRepo) {
-        const repoArray = [];
-        for(const [relativePath, cacheInfo] of cacheMap) {
-            const entry = {};
-            entry.downloadedLength = cacheInfo.downloadedLength;
-            entry.completelyDownloaded = cacheInfo.completelyDownloaded;
-            entry.deletionScheduled = cacheInfo.deletionScheduled || false;
-            entry.releasever = cacheInfo.releasever;
-            entry.basearch = cacheInfo.basearch;
-            entry.relativePath = getRealRelativePathFromCacheInfo(repo, cacheInfo);
-            repoArray.push(entry);
+    for(const [distro, repoCacheMap] of m_cacheMapForDistro) {
+        const distroObject = {};
+        for(const [repo, cacheMap] of repoCacheMap) {
+            const repoArray = [];
+            for(const [relativePath, cacheInfo] of cacheMap) {
+                const entry = {};
+                entry.downloadedLength = cacheInfo.downloadedLength;
+                entry.completelyDownloaded = cacheInfo.completelyDownloaded;
+                entry.deletionScheduled = cacheInfo.deletionScheduled || false;
+                entry.releasever = cacheInfo.releasever;
+                entry.basearch = cacheInfo.basearch;
+                entry.relativePath = getRealRelativePathFromCacheInfo(distro, repo, cacheInfo);
+                repoArray.push(entry);
+            }
+            distroObject[repo] = repoArray;
         }
-        toReturn[repo] = repoArray;
+        toReturn[distro]  = distroObject;
     }
     return toReturn;
 }
@@ -559,12 +586,17 @@ async function init(config)
     m_config.cacheDir = utils.ensureEndsWithSlash(m_config.cacheDir);
     m_cacheDataDir = m_config.cacheDir + 'cache-data/';
 
-    for(let repoName in m_config.repos) {
-        if(!m_config.repos.hasOwnProperty(repoName)) {
+    for(let distro in m_config.repos) {
+        if(!m_config.repos.hasOwnProperty(distro)) {
             continue;
         }
-        console.log('Initializing repo \'' + repoName + '\'');
-        await readCacheFromDisk(repoName);
+        for(let repoName in m_config.repos[distro]) {
+            if(!m_config.repos[distro].hasOwnProperty(repoName)) {
+                continue;
+            }
+            console.log('Initializing repo \'' + repoName + '\'' + ' for \'' + distro + '\'');
+            await readCacheFromDisk(distro, repoName);
+        }
     }
 }
 

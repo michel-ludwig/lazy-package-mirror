@@ -18,7 +18,7 @@
 const page_cache_content =
 (function() {
 
-    let m_repoCacheEntries =  null;
+    let m_distroRepoCacheEntries =  null;
 
     const htmlContent = `
     <h1>Cache Content</h1>
@@ -30,10 +30,10 @@ const page_cache_content =
     <div id='cache_tables_hook'></div>
     `;
 
-    async function scheduleCacheEntryDeletion(repo, releasever, basearch, path)
+    async function scheduleCacheEntryDeletion(distro, repo, releasever, basearch, path)
     {
         try {// '/api/v1/cache/delete/:repo/:releasever/:basearch/:path*'
-            const result = await fetchAsync('/api/v1/cache/delete/' + repo + '/' + releasever + '/' + basearch + '/' + path);
+            const result = await fetchAsync('/api/v1/cache/delete/' + distro + '/' + repo + '/' + releasever + '/' + basearch + '/' + path);
             if(!result) {
                 console.error('Deletion could not be scheduled!');
             }
@@ -63,7 +63,7 @@ const page_cache_content =
         }
     }
 
-    function fillTableRow(repo, rowElement, cacheEntry)
+    function fillTableRow(distro, repo, rowElement, cacheEntry)
     {
         addTableCell(rowElement, cacheEntry.releasever);
         addTableCell(rowElement, cacheEntry.basearch);
@@ -72,12 +72,12 @@ const page_cache_content =
         addTableCell(rowElement, cacheEntry.completelyDownloaded);
         addTableCell(rowElement, cacheEntry.deletionScheduled);
         const deletionLink = makeTextLink('Delete', async function() {
-                                                        await scheduleCacheEntryDeletion(repo, cacheEntry.releasever, cacheEntry.basearch, cacheEntry.relativePath);
+                                                        await scheduleCacheEntryDeletion(distro, repo, cacheEntry.releasever, cacheEntry.basearch, cacheEntry.relativePath);
                                                     });
         addTableCell(rowElement, deletionLink);
     }
 
-    function createTable(repo, cacheEntriesArray)
+    function createTable(distro, repo, cacheEntriesArray)
     {
         const tableRoot = document.createElement('table');
 
@@ -99,7 +99,7 @@ const page_cache_content =
             const rowElement = document.createElement('tr');
             tableRoot.appendChild(rowElement);
 
-            fillTableRow(repo, rowElement, cacheEntry);
+            fillTableRow(distro, repo, rowElement, cacheEntry);
         }
 
         return tableRoot;
@@ -111,27 +111,38 @@ const page_cache_content =
         removeAllChildren(cacheTablesHook);
 
         try {
-            m_repoCacheEntries = await fetchJSONAsync('/api/v1/cache/overview/');
+            m_distroRepoCacheEntries = await fetchJSONAsync('/api/v1/cache/overview/');
         }
         catch(error) {
             console.error(error);
         }
 
-        for(let repo in m_repoCacheEntries) {
-            if(!m_repoCacheEntries.hasOwnProperty(repo)) {
+        for(let distro in m_distroRepoCacheEntries) {
+            if(!m_distroRepoCacheEntries.hasOwnProperty(distro)) {
                 continue;
             }
 
-            const cacheEntries = m_repoCacheEntries[repo];
+            const distroTitleElement = document.createElement('h2');
+            distroTitleElement.textContent = 'Distro \'' + distro + '\'';
+            cacheTablesHook.appendChild(distroTitleElement);
 
-            const titleElement = document.createElement('h3');
-            titleElement.textContent = 'Repository ' + repo;
-            cacheTablesHook.appendChild(titleElement);
+            for(let repo in m_distroRepoCacheEntries[distro]) {
+                if(!m_distroRepoCacheEntries[distro].hasOwnProperty(repo)) {
+                    continue;
+                }
 
-            const tableRoot = createTable(repo, cacheEntries);
-            tableRoot.className = 'repositoryTable';
-            cacheTablesHook.appendChild(tableRoot);
+                const cacheEntries = m_distroRepoCacheEntries[distro][repo];
+
+                const titleElement = document.createElement('h3');
+                titleElement.textContent = 'Repository ' + repo;
+                cacheTablesHook.appendChild(titleElement);
+
+                const tableRoot = createTable(distro, repo, cacheEntries);
+                tableRoot.className = 'repositoryTable';
+                cacheTablesHook.appendChild(tableRoot);
+            }
         }
+
     }
 
     async function init()

@@ -18,15 +18,37 @@
 
 module.exports = function(app, cache, config) {
 
-app.get(/repo-data/, async (req, res) => {
+app.get('/repo-data/', async (req, res) => {
+    const toSend = {};
+    if(!config.hasOwnProperty('repos')) {
+        res.send(toSend);
+        return;
+    }
+
+    for(let distro in config.repos) {
+        const reposToSend = {};
+        for(let repo in config.repos[distro]) {
+            if(!config.repos[distro].hasOwnProperty(repo)) {
+                continue;
+            }
+            reposToSend[repo] = {url: 'http://' + config.hostName + ':' + config.listenPort + '/cache/' + repo + '/$releasever/$basearch/'};
+        }
+        toSend[distro] = reposToSend;
+    }
+    res.send(toSend);
+});
+
+app.get('/repo-data/:distro/', async (req, res) => {
+    const distro = req.params.distro;
+
     const reposToSend = {};
     if(!config.hasOwnProperty('repos')) {
         res.send(reposToSend);
         return;
     }
 
-    for(let repo in config.repos) {
-        if(!config.repos.hasOwnProperty(repo)) {
+    for(let repo in config.repos[distro]) {
+        if(!config.repos[distro].hasOwnProperty(repo)) {
             continue;
         }
         reposToSend[repo] = {url: 'http://' + config.hostName + ':' + config.listenPort + '/cache/' + repo + '/$releasever/$basearch/'};
@@ -34,16 +56,17 @@ app.get(/repo-data/, async (req, res) => {
     res.send(reposToSend);
 });
 
-app.get(/^\/cache\/([a-zA-Z0-9\-]+)\/([0-9]+)\/([a-zA-Z0-9_]+)\/(.+)/, async (req, res) => {
-    const repo = req.params[0];
-    const releasever = req.params[1];
-    const basearch = req.params[2];
-    const path = req.params[3];
+app.get('/cache/:distro/:repo/:releasever/:basearch/:path(*)', async (req, res) => {
+    const distro = req.params.distro;
+    const repo = req.params.repo;
+    const releasever = req.params.releasever;
+    const basearch = req.params.basearch;
+    const path = req.params.path;
 
     try {
         res.status(200);
 
-        await cache.fileRequested(repo, releasever, basearch, path, res);
+        await cache.fileRequested(distro, repo, releasever, basearch, path, res);
     }
     catch(error) {
         console.log('error', error);
@@ -68,19 +91,20 @@ app.get('/api/v1/cache/overview/', (req, res) => {
     res.send(cache.getCacheOverview());
 });
 
-app.get('/api/v1/cache/delete/:repo/:releasever/:basearch/:path(*)', async (req, res) => {
+app.get('/api/v1/cache/delete/:distro/:repo/:releasever/:basearch/:path(*)', async (req, res) => {
+    const distro = req.params.distro;
     const repo = req.params.repo;
     const releasever = req.params.releasever;
     const basearch = req.params.basearch;
     const path = req.params.path;
 
-    if(!cache.containsCachedFile(repo, releasever, basearch, path)) {
+    if(!cache.containsCachedFile(distro, repo, releasever, basearch, path)) {
         res.sendStatus(404);
         return;
     }
 
     try {
-        cache.scheduleCachedFileDeletion(repo, releasever, basearch, path);
+        cache.scheduleCachedFileDeletion(distro, repo, releasever, basearch, path);
         res.sendStatus(200);
     }
     catch(error) {
