@@ -89,7 +89,7 @@ const page_cache_content =
             addTableHeader(rowElement, 'basearch');
             addTableHeader(rowElement, 'Path');
             addTableHeader(rowElement, 'Size');
-            addTableHeader(rowElement, 'Downloaded completly?');
+            addTableHeader(rowElement, 'Downloaded completely?');
             addTableHeader(rowElement, 'Deletion scheduled?');
         }
 
