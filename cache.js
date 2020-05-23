@@ -343,6 +343,20 @@ async function fileRequested(distro, repo, releasever, basearch, path, incomingR
     if(m_config.logRequests) {
         console.log('file requested:', distro, repo, releasever, basearch, path);
     }
+
+    if(!m_config.hasOwnProperty('repos')
+        || !m_config.repos.hasOwnProperty(distro)
+        || !m_config.repos[distro].hasOwnProperty(repo)) {
+        incomingRes.sendStatus(404);
+        incomingRes.end();
+
+        if(m_config.logRequests) {
+            console.log('\tunknown distro or repository:', distro, repo);
+        }
+
+        return;
+    }
+
     if(!path.endsWith(".rpm") && !path.endsWith(".drpm")) { // we only cache rpm files
         if(m_config.logRequests) {
             console.log('\tnot using cache');

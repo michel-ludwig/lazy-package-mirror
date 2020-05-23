@@ -64,8 +64,6 @@ app.get('/cache/:distro/:repo/:releasever/:basearch/:path(*)', async (req, res) 
     const path = req.params.path;
 
     try {
-        res.status(200);
-
         await cache.fileRequested(distro, repo, releasever, basearch, path, res);
     }
     catch(error) {
