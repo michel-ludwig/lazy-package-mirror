@@ -31,7 +31,7 @@ app.get('/repo-data/', async (req, res) => {
             if(!config.repos[distro].hasOwnProperty(repo)) {
                 continue;
             }
-            reposToSend[repo] = {url: 'http://' + config.hostName + ':' + config.listenPort + '/cache/' + repo + '/$releasever/$basearch/'};
+            reposToSend[repo] = {url: 'http://' + config.hostName + ':' + config.listenPort + '/cache/' + distro '/' + repo + '/$releasever/$basearch/'};
         }
         toSend[distro] = reposToSend;
     }
@@ -51,7 +51,7 @@ app.get('/repo-data/:distro/', async (req, res) => {
         if(!config.repos[distro].hasOwnProperty(repo)) {
             continue;
         }
-        reposToSend[repo] = {url: 'http://' + config.hostName + ':' + config.listenPort + '/cache/' + repo + '/$releasever/$basearch/'};
+        reposToSend[repo] = {url: 'http://' + config.hostName + ':' + config.listenPort + '/cache/' + distro + '/' + repo + '/$releasever/$basearch/'};
     }
     res.send(reposToSend);
 });
