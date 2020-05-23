@@ -111,6 +111,10 @@ app.get('/api/v1/cache/delete/:distro/:repo/:releasever/:basearch/:path(*)', asy
     }
 });
 
+app.get('*', function(req, res) {
+  res.redirect('/admin');
+});
+
 }
 
 // kate: space-indent on; indent-width 4; mixedindent off;
