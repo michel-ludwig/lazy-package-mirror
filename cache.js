@@ -70,6 +70,9 @@ async function readCacheFromDisk(distro, repo)
         cacheInfo.releasever = storedCacheObject[relativePath].releasever;
         cacheInfo.basearch = storedCacheObject[relativePath].basearch;
         cacheInfo.completelyDownloaded = storedCacheObject[relativePath].completelyDownloaded;
+        if(storedCacheObject[relativePath].hasOwnProperty('downloadFinishedAt')) {
+            cacheInfo.downloadFinishedAt = new Date(storedCacheObject[relativePath].downloadFinishedAt);
+        }
         cacheInfo.downloadedLength = storedCacheObject[relativePath].downloadedLength;
         cacheInfo.dataFile = getDiskPathRaw(distro, repo, relativePath);
         cacheMapForDistroRepo.set(relativePath, cacheInfo);
@@ -94,6 +97,9 @@ async function writeCachesToDisk()
             const objectForFilePath = {};
             objectForFilePath.completelyDownloaded = cacheInfo.completelyDownloaded;
             objectForFilePath.downloadedLength = cacheInfo.downloadedLength;
+            if(cacheInfo.hasOwnProperty('downloadFinishedAt')) {
+                objectForFilePath.downloadFinishedAt = (cacheInfo.downloadFinishedAt).getTime();
+            }
             objectForFilePath.releasever = cacheInfo.releasever;
             objectForFilePath.basearch = cacheInfo.basearch;
             toSave[relativePath] = objectForFilePath;
@@ -520,6 +526,7 @@ async function downloadAndDistribute(distro, repo, releasever, basearch, path, i
         }
         cacheInfo.downloading = false;
         cacheInfo.completelyDownloaded = true;
+        cacheInfo.downloadFinishedAt = new Date();
         setImmediate(writeCachesToDisk);
         if(cacheInfo.deletionScheduled) {
             scheduleCachedFileDeletionRaw(distro, repo, cacheInfo);
@@ -577,6 +584,9 @@ function getCacheOverview()
             for(const [relativePath, cacheInfo] of cacheMap) {
                 const entry = {};
                 entry.downloadedLength = cacheInfo.downloadedLength;
+                if(cacheInfo.hasOwnProperty('downloadFinishedAt')) {
+                    entry.downloadFinishedAt = (cacheInfo.downloadFinishedAt).getTime();
+                }
                 entry.completelyDownloaded = cacheInfo.completelyDownloaded;
                 entry.deletionScheduled = cacheInfo.deletionScheduled || false;
                 entry.releasever = cacheInfo.releasever;
